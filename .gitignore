@@ -1,4 +1,11 @@
-data
-graphs
-~~ bin ~~
+02_raw_data/**/*data*/**
+**/graphs/**
+**/graphics/**
+**/~~ bin ~~/**
+**/.ipynb_checkpoints/**
+01_literature
+03_clean_data
 desktop.ini
+02_raw_data/the_OG_pile
+02_raw_data/05_create_ethnicity_compositions/deepface
+**.csv
