@@ -1,14 +1,10 @@
 #%%
 import json
-import os
 import random
 from copy import deepcopy
-from curses import newpad
 from datetime import date, datetime
 from glob import glob
-from pathlib import Path
 from time import sleep, time
-from unittest import expectedFailure
 
 import pandas as pd
 import requests
@@ -45,9 +41,9 @@ def numberLatestScrapingRun():
     todaysFiles = glob(f'01_data-trips_with_duplicates/{date.today()}*.csv')
 
     try:
-        return max([path[-5] for path in todaysFiles])
+        return int(max([path[-5] for path in todaysFiles]))
     except:
-        return '0'
+        return -1
 
 def getTrips(origin, destinations, startdate, raw_data_location):
     '''
@@ -123,7 +119,7 @@ def getTrips(origin, destinations, startdate, raw_data_location):
                 rawJSON = searchResults.json()
 
                 # save to disk and to list
-                with open(raw_data_location, 'a') as f:
+                with open(f'{raw_data_location}/{today}_JSON.txt', 'a') as f:
                     f.write(json.dumps(rawJSON))
                 listOfTripDictionaries.extend(rawJSON['trips'])
                     
@@ -152,7 +148,7 @@ def getTrips(origin, destinations, startdate, raw_data_location):
                     rawJSON = searchResults.json()
 
                     # save to disk and to list
-                    with open(raw_data_location, 'a') as f:
+                    with open(f'{raw_data_location}/{today}_JSON.txt', 'a') as f:
                         f.write(json.dumps(rawJSON))
                     listOfTripDictionaries.extend(rawJSON['trips'])
     
@@ -172,7 +168,7 @@ def getTrips(origin, destinations, startdate, raw_data_location):
                 print(f'Decoding JSON has failed for trips from {destinationCityRow.Commune}')
 
                 # dump what you got
-                with open(raw_data_location, 'a') as f:
+                with open(f'{raw_data_location}/{today}_JSON.txt', 'a') as f:
                     f.write('ValueError')
                     
                 tripsOfOneOriginToAllDestinations.append(tuple([
@@ -226,7 +222,7 @@ frenchPrefectures = frenchPrefectures.assign(
     coord=lambda df: df['LatDD'].round(4).astype(str) + ',' + df['LonDD'].round(4).astype(str),
     ).set_index('DeptNum')
 
-# frenchPrefectures
+frenchPrefectures
 
 
 #%% request trips only starting in biggest cities (but to all prefectures)
@@ -247,17 +243,38 @@ majorCitiesList = [
 ]
 
 majorCities = frenchPrefectures[frenchPrefectures.Commune.isin(majorCitiesList)].copy()
-# majorCities
+majorCities
 
 
 
 
 
 #%% ####################################################### scrape trips ################################################################################
-majorCitiesCopy = majorCities.copy()
+'''
+trips_list now becomes a list of lists of lists:
+[
+    [origin city number (eg. PARIS),    [
+                                            (destination number (eg of nice),       date,   [trip-PARIS-to-nice1, trip-PARIS-to-nice2, trip-PARIS-to-nice3, trip-PARIS-to-nice4, etc]),
+                                            (destination number (eg of marseille),  date,   [trip-PARIS-to-marseille1, trip-PARIS-to-marseille2, trip-PARIS-to-marseille3, trip-PARIS-to-marseille4, etc]),
+                                            ...,
+                                        ]
+    ], 
 
+    [origin city number (eg. LYON),     [
+                                            (destination number (eg of nice),       date,   [trip-LYON-to-nice1, trip-LYON-to-nice2, trip-LYON-to-nice3, trip-LYON-to-nice4, etc]),
+                                            (destination number (eg of marseille),  date,   [trip-LYON-to-marseille1, trip-LYON-to-marseille2, trip-LYON-to-marseille3, trip-LYON-to-marseille4, etc]),
+                                            ...,
+                                        ]
+    ], 
+
+    [...], 
+    [...], 
+]
+'''
 trips_list = []
 
+
+majorCitiesCopy = majorCities.copy()
 while not majorCitiesCopy.empty:
     for originDepartmentNumber, originCityRow in majorCitiesCopy.iterrows():
 
@@ -282,35 +299,18 @@ while not majorCitiesCopy.empty:
             print(e)
             pass
 
+        break
+
     cur_length = majorCitiesCopy.shape[0]
     scraped_length = len(trips_list)
     print(f"TRIP LOOP COMPLETED: Retry {cur_length} trips. {scraped_length} trips have been scraped.")
 
+    break
 
 
-'''
-trips_list now becomes a list of lists of lists:
-[
-    [origin city number (eg. PARIS),    [
-                                            (destination number (eg of nice),       date,   [trip-PARIS-to-nice1, trip-PARIS-to-nice2, trip-PARIS-to-nice3, trip-PARIS-to-nice4, etc]),
-                                            (destination number (eg of marseille),  date,   [trip-PARIS-to-marseille1, trip-PARIS-to-marseille2, trip-PARIS-to-marseille3, trip-PARIS-to-marseille4, etc]),
-                                            ...,
-                                        ]
-    ], 
-
-    [origin city number (eg. LYON),     [
-                                            (destination number (eg of nice),       date,   [trip-LYON-to-nice1, trip-LYON-to-nice2, trip-LYON-to-nice3, trip-LYON-to-nice4, etc]),
-                                            (destination number (eg of marseille),  date,   [trip-LYON-to-marseille1, trip-LYON-to-marseille2, trip-LYON-to-marseille3, trip-LYON-to-marseille4, etc]),
-                                            ...,
-                                        ]
-    ], 
-
-    [...], 
-    [...], 
-]
-'''
 
 
+pass
 
 
 
@@ -411,5 +411,5 @@ results['day_counter'] = numberLatestScrapingRun() + 1
 results = results.sample(frac=1) 
 
 
-results.to_csv(f'01_data-trips_with_duplicates/{date.today()}_trips_{numberLatestScrapingRun() + 1}.csv')
+results.to_csv(f'../02_process_trips/01_data-trips_with_duplicates/{date.today()}_trips_{numberLatestScrapingRun() + 1}.csv')
 
