@@ -18,35 +18,10 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 
 
-today = date.today()
 
-#%%
-MESSAGE_INFO = "%(asctime)s %(trip)s ----- %(message)s"
-DATEFMT = "%Y/%m/%d %H:%M"
 
-file_handler = logging.FileHandler(
-    filename=f'./log/{today}_scraper.log', 
-    mode='a'
-)
 
-file_handler.setFormatter(
-    logging.Formatter(
-        fmt=MESSAGE_INFO,
-        datefmt=DATEFMT
-    )
-)
 
-stream_handler = logging.StreamHandler()
-
-logging.basicConfig(
-    level=logging.INFO,
-    format=MESSAGE_INFO,
-    datefmt=DATEFMT,
-    handlers=[
-        file_handler,
-        stream_handler
-    ]
-)
 
 class ScrapeSession(object):
     _BASE_URL = "https://www.blablacar.co.uk"
@@ -128,19 +103,23 @@ class ScrapeSession(object):
             trip_id: {
                 "ride": {},
                 "rating": [],
-                "status": None
+                "status": None,
+                }
             }
-        }
         
         data = {
             "source": "CARPOOLING",
             "id": trip_id,
-        }
+            }
         
         i = 0
         
         self._logger.info('CREATE SESSION ({})'.format(self.session.proxies['http']))
         
+
+
+
+
         while True:    
             try:
                 # Check for Session set-up
@@ -160,14 +139,20 @@ class ScrapeSession(object):
                 
                 time.sleep(random.uniform(2,6))
 
-        #-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+##-+#-+#-+#-+
+                #################################################################### catch bad responses ##################################################################################
+
                 self._logger.info('REQUESTING BASIC INFO ({})'.format(self.session.proxies['http']))
+
+
                 response = self.session.get(
                     "{}/trip".format(self._BASE_URL),
                     params=data,
                     timeout=30
                 )
                 time.sleep(random.uniform(1,5))
+
+
+
                 # Catch FORBIDDEN HTML responses
                 if response.status_code == 403:
                     self._logger.info('403 FORBIDDEN ERROR ({}): {}'.format(self.session.proxies['http'], response.reason))
@@ -195,8 +180,12 @@ class ScrapeSession(object):
                     
                 time.sleep(random.uniform(4,8))
                 
-    #-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+##-+#-+#-+#-+
+
+                ########################################################################################################################################################################
+                
+
                 self._logger.info('REQUESTING TRIP DETAILS')
+                
                 self.session.headers = {
                     "User-Agent": self.USER_AGENT,
                     "Accept": "application/json",
@@ -235,6 +224,7 @@ class ScrapeSession(object):
                     timeout=30
                 )
                 
+
                 # Capture deleted trips between API call and web scrape
                 if response.status_code == 404:
                     self._logger.info(f'TRIP DELETED: {response.reason}')
@@ -263,7 +253,8 @@ class ScrapeSession(object):
                 
                 time.sleep(random.uniform(4,6))
                 
-    #-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+#-+##-+#-+#-+#-+
+                ########################################################################################################################################################################
+                
                 self._logger.info('REQUESTING RATINGS')
                 
                 page_num = 0
@@ -304,12 +295,16 @@ class ScrapeSession(object):
                         result[trip_id]['rating'] = ['No Ratings']
                         result[trip_id]['web_scrape_time'] = round(time.time())
                 
-                # Succesful scrape; break with status True
+
+
+                # Successful scrape; break with status True
                 self._logger.info('<<<FINISHED SCRAPE>>>')
                 result[trip_id]['status'] = True
                 result[trip_id]['web_scrape_time'] = round(time.time())
                 break
             
+
+
             # Capture any other exceptions; return control to while loop
             except Exception as e:
                 self._logger.info("REQUEST ERROR: {}".format(e))
@@ -318,6 +313,8 @@ class ScrapeSession(object):
         
         return result
     
+
+
 def uniquifier(path):
     filename, extension = os.path.splitext(path)
     counter = 1
@@ -328,73 +325,6 @@ def uniquifier(path):
 
     return path
 
-def parser(file):
-    '''
-    Parses nested dictionaries into a dataframe
-
-    Parameters
-    ----------
-    file : dumped json list
-
-    Returns
-    -------
-    output_df : trip dataframe
-
-    '''
-    with open(file) as f:
-        data = json.loads(f.read())
-           
-    data = {k: v for x in data for k in x.keys() for v in x.values() if v['status']}
-           
-    trip_df = pd.DataFrame.from_dict(data, orient='index')
-    
-    t_list = []
-    for i, row in trip_df.iterrows():
-        print(i)
-        try:
-            rating_info = [item for sublist in row['rating'] for item in sublist]
-            
-            ride_df = pd.DataFrame([row['ride']], columns=row['ride'].keys())
-            
-            ride_df['ratings'] = [rating_info]
-            ride_df['web_scrape_time'] = row['web_scrape_time']
-            
-            ride_df = (
-                ride_df
-                .join(pd.json_normalize(ride_df['driver']).add_prefix('driver_'))
-                .join(pd.json_normalize(ride_df['multimodal_id']))
-                .join(pd.json_normalize(ride_df['vehicle']).add_prefix('vehicle_'))
-                .join(pd.json_normalize(ride_df['seats']).add_prefix('seats_'))
-            )
-        
-            t_list.append(ride_df)
-                
-        except Exception:
-            # Skips deleted trips
-            pass
-        
-    output_df = pd.concat(t_list)
-    
-    print('made it')
-    cols = [
-        col
-        for col in output_df.columns 
-        if col.startswith('passengers') 
-        or col.startswith('driver_')
-        or col.startswith('vehicle_')
-        or col.startswith('seats_')
-        or col.startswith('ratings')
-        or col.startswith('web_scrape')
-        ]
-    
-    output_df = (
-        output_df[['id', 'comment', 'flags'] + cols]
-        .rename(columns={'id': 'trip_id'})
-    )
-    
-    output_df.reset_index(drop=True, inplace=True)
-    
-    return output_df
 
 
 
@@ -402,9 +332,7 @@ def parser(file):
 
 
 
-
-
-#%% Paths & times
+#%% Paths & times & logging
 bbcardir = Path(os.environ['BLABLACAR'])
 scriptsdir = bbcardir / 'git_scripts'
 datadir = bbcardir / 'data'
@@ -412,13 +340,47 @@ outdir = datadir / 'scraper' / 'output'
 csvdir = datadir / 'scraper' / '_API_dumps' / 'csv'
 os.chdir(scriptsdir / 'scraper')
 
+
+
+
+today = date.today()
 now = datetime.now()
 today = np.datetime64('today')
 tomorrow = today + np.timedelta64(1, 'D')
 
 dt_string = now.strftime("%Y%m%d_%H")
 
-file_to_operate = uniquifier(str(datadir / 'scraper' / '_scrape_dumps' / f'{today}_trips.txt'))
+file_to_operate = uniquifier(str(datadir / 'scraper' / '_scrape_dumps' / f'{today}_trips.txt'))         # now in 03_scrape_trip_details/01_data-raw_json_dumps/
+
+
+
+
+### logging ###
+MESSAGE_INFO = "%(asctime)s %(trip)s ----- %(message)s"
+DATEFMT = "%Y/%m/%d %H:%M"
+file_handler = logging.FileHandler(
+    filename=f'./log/{today}_scraper.log', 
+    mode='a'
+)
+
+file_handler.setFormatter(
+    logging.Formatter(
+        fmt=MESSAGE_INFO,
+        datefmt=DATEFMT
+    )
+)
+
+stream_handler = logging.StreamHandler()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format=MESSAGE_INFO,
+    datefmt=DATEFMT,
+    handlers=[
+        file_handler,
+        stream_handler
+    ]
+)
 
 
 
@@ -426,15 +388,15 @@ file_to_operate = uniquifier(str(datadir / 'scraper' / '_scrape_dumps' / f'{toda
 
 
 #%% #################################################### PROCESSING ####################################################################################################
-list_of_paths = csvdir.glob('*.csv')
+list_of_paths = csvdir.glob('*.csv')                                # '_API_dumps' / 'csv' / [date]_trips_0.csv
 day_paths = [x for x in list_of_paths if str(today) in x.name]
 
-# Load in data
+# create dataframe of all observations of today
 lst_results = []
 for item in day_paths:
     _ = pd.read_csv(item)
     lst_results.append(_)
-results = pd.concat(lst_results)
+results = pd.concat(lst_results)        
 
 # Define datetimes
 results['start.date_time'] = pd.to_datetime(results['start.date_time'])
@@ -444,11 +406,12 @@ results['end.date_time'] = pd.to_datetime(results['end.date_time'])
 store_results = (
     results
     .dropna(subset=['trip_id'])
-    .sort_values(by=['num_id', 'day_counter'])
-    .drop_duplicates(subset=['num_id', 'DeptNum', 'destination'], keep='first')
+    .sort_values(by=['num_id', 'day_counter'])                                          # default: ascending 
+    .drop_duplicates(subset=['num_id', 'DeptNum', 'destination'], keep='first')         # take the FIRST
 )
 
-store_results.to_csv(outdir / f'{dt_string}h_trips.csv')
+
+store_results.to_csv(outdir / f'{dt_string}h_trips.csv')    # 20210621_14h_trips.csv -> we put it in 02_process_trips/02_data-trips_duplicates_removed
 
 
 
@@ -467,11 +430,10 @@ API_results = (
     results
     .dropna(subset=['trip_id'])
     .sort_values(by=['num_id', 'day_counter'])
-    .assign(iter_found=lambda df:
-        df.groupby('num_id')['day_counter'].transform('min')
-    )
+    .assign(iter_found=lambda df: df.groupby('num_id')['day_counter'].transform('min'))
     .drop_duplicates(subset=['num_id'], keep='last')
-)
+    )
+
 
 # Keep today-tomorrow trips
 API_results = (
@@ -484,8 +446,8 @@ API_results = (
 
 
 
-# Create list to run web scraper through
-API_results = API_results['trip_id'].to_list()
+# Create list to run web scraper through -> this is so, so bad - using the same variable for a different type AND overwriting it
+tripIDlist = API_results['trip_id'].to_list()
 
 
 
@@ -499,48 +461,60 @@ API_results = API_results['trip_id'].to_list()
 trips_dict = {}
 json_dump = []
 
-while API_results:
+while tripIDlist:
+
     try:
-        base_len = len(API_results)
+        base_len = len(tripIDlist)
+
         threads = []
         with ThreadPoolExecutor(max_workers=6) as executor:
-            for trip in API_results:
-                threads.append(executor.submit(ScrapeSession().scrape, trip))
+
+            for tripID in tripIDlist:
+                threads.append(executor.submit(ScrapeSession().scrape, tripID))
                 time.sleep(random.uniform(3, 5))
-            for trip in as_completed(threads):
-                json_dump.append(trip.result())
+
+            for tripID in as_completed(threads):             # 03_scrape_trip_details/01_data-raw_json_dumps/
+                json_dump.append(tripID.result())
 
             wait(threads, timeout=7200, return_when=ALL_COMPLETED)
 
-        merged_results = [x for i in threads for x in i.result().items()]
-        merged_results = dict((x, y) for x, y in merged_results)
+        merged_results = [
+            x 
+            for thread in threads 
+            for x in thread.result().items()                        # this is the dictionary that 'ScrapeSession().scrape() returns
+            ]
+        trips_dict.update(dict((x, y) for x, y in merged_results))  # here we separate it again into key-value pairs
 
-        trips_dict.update(merged_results)
 
-        API_results = [x for x in trips_dict if not trips_dict[x]['status']]
 
-        next_len = len(API_results)
 
+        tripIDlist = [x for x in trips_dict if not trips_dict[x]['status']]     # take only the tripIds which have status 'false'
+
+        next_len = len(tripIDlist)
         print(f'ITERATION COMPLETED. NEXT ITERATION HAS {next_len}, DOWN FROM {base_len} ORIGINAL TRIPS')
+
 
     except Exception as e:
         print('########### ERROR THAT TERMINATES WHILE LOOP', e)
         # If crash, save results
-        with open(file_to_operate, 'w') as f:
+        with open(file_to_operate, 'w') as f:       # 03_scrape_trip_details/01_data-raw_json_dumps/
             f.write(json.dumps(json_dump))
             
+
+
 # Dump results if trip id's are exhausted
-with open(file_to_operate, 'w') as f:
-            f.write(json.dumps(json_dump))        
+with open(file_to_operate, 'w') as f:            # 03_scrape_trip_details/01_data-raw_json_dumps/
+    f.write(json.dumps(json_dump))        
 
 
 
 
 
-#%% Parse JSON data
+# #%% Parse JSON data
 
-output_df = parser(file_to_operate)
+# output_df = parser(file_to_operate)         # now in 03_scrape_trip_details/01_data-raw_json_dumps/
 
-file_to_save = uniquifier(str(outdir / 'parsed_trips' / f'{today}_parsed_trip_results.pkl'))
+# file_to_save = uniquifier(str(outdir / 'parsed_trips' / f'{today}_parsed_trip_results.pkl'))
 
-output_df.to_pickle(file_to_save)
+# output_df.to_pickle(file_to_save)       # now in 03_scrape_trip_details/02_data-final_output_pickles/
+
