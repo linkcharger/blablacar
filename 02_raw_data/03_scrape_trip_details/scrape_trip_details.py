@@ -15,7 +15,6 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 
-.
 
 
 
@@ -399,6 +398,12 @@ def parser(file):
 
 
 
+
+
+
+
+
+
 #%% Paths & times
 bbcardir = Path(os.environ['BLABLACAR'])
 scriptsdir = bbcardir / 'git_scripts'
@@ -527,6 +532,10 @@ while API_results:
 # Dump results if trip id's are exhausted
 with open(file_to_operate, 'w') as f:
             f.write(json.dumps(json_dump))        
+
+
+
+
 
 #%% Parse JSON data
 
