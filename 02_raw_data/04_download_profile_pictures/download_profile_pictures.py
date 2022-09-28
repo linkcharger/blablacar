@@ -85,119 +85,149 @@ def parseJSONtoDF(file):
     
     return output_df
 
-class ThumbnailParser:
+class PFPdownloader:
 
-    def __init__(self, inputDF, date, userType: Union[Path, list], outputPath) -> None:
+    def __init__(self, file, userTypes: Union[Path, list], outputPath) -> None:
         '''
-        Class parses any number of pickle files from the parsed output and stores
-        thumbnails for drivers, passengers or/and reviewers.
+        Parses JSON file and downloads profile pictures (PFPs) for 
+        drivers, passengers or/and reviewers with a normal GET request.
         
         Parameters
         ----------
-        files : parsed_output files
-        utype : user types
-        output : output path
+        file: JSON file with raw data for the day (detailed trip information)
+        userTypes: the types of blablacar users for whom you want to download profile pictures (pfps)
+        outputPath: the folder in which to store all pictures
         '''
-        assert set(userType) <= set(['drivers', 'passengers', 'ratings']), ('Unknown user type string used. Please choose between drivers, passengers, ratings.')
-        if not isinstance(userType, list): userType = [userType]
-        self.utype = userType
+        assert set(userTypes) <= set(['drivers', 'passengers', 'reviewers']), ('Unknown user type string used. Please choose between drivers, passengers, reviewers.')
+        if not isinstance(userTypes, list): userTypes = [userTypes]
+        self.userTypes = userTypes
         self.outputPath = outputPath
         self.types = {
-            'drivers': {'func': self.drivers, 'data': []},
-            'passengers': {'func': self.passengers, 'data': []},
-            'ratings': {'func': self.ratings, 'data': []}
+            'drivers': {
+                'func': self.prepareDriverData, 
+                'data': [],
+                },
+            'passengers': {
+                'func': self.preparePassengerData, 
+                'data': [],
+                },
+            'reviewers': {
+                'func': self.prepareReviewerData, 
+                'data': [],
+                }
             }
 
-        self.data = inputDF
-        self.data['file_date'] = date
+        self.data = parseJSONtoDF(file)
+        self.data['file_date'] = re.search(('\d{4}-\d{2}-\d{2}'), file).group(0), 
         self.data['num_id'] = self.data.trip_id.str.extract('(\d*)-').astype('int64')
 
-
-    def drivers(self):
+    def prepareDriverData(self):
         '''
-        Creates drivers dataset, normalizes ID label.
+        prepares driver dataset for downloading in the next step. 
+        
+        - select relevant columns from the DF of the day (but also irrelevant ones like gender and name, when all were gonna use is the ID and URL?)
+        - drop duplicates
+        - rename to uniform name scheme (so that download function knows how to deal with it)
         '''
-        self.drivers_df = (
+        driverData = (
             self.data[['num_id', 'driver_id', 'driver_display_name', 'driver_gender', 'driver_thumbnail']]
             .drop_duplicates(subset=['driver_id', 'driver_thumbnail'])
-            .rename(columns={'driver_id': 'ID', 'driver_thumbnail': 'thumbnail'})
+            .rename(columns={
+                'driver_id': 'ID', 
+                'driver_thumbnail': 'thumbnail'
+                })
         )
-        self.types['drivers']['data'] = self.drivers_df
+        self.types['drivers']['data'] = driverData
     
-    def passengers(self):
+    def preparePassengerData(self):
         '''
-        Creates passengers dataset, normalized ID label and explodes JSON.
+        prepares passenger dataset for downloading in the next step. 
+
+        - select relevant columns from the DF of the day 
+        - explode to get more info from JSON
+        - rename to uniform name scheme
         '''
-        self.passengers_df = self.data[['num_id', 'passengers']]
-        self.passengers_df = self.passengers_df.explode('passengers')
-        self.passengers_df.dropna(subset=['passengers'], inplace=True)
-        self.json_passengers = pd.json_normalize(self.passengers_df.passengers)
-        self.passengers_df.reset_index(inplace=True, drop=True)
-        self.passengers_df = pd.merge(
-            self.passengers_df[['num_id']], 
-            self.json_passengers[['id', 'display_name', 'gender', 'thumbnail']],
+        passengerData = self.data[['num_id', 'passengers']]             # start with DF of the day
+        passengerData = passengerData.explode('passengers')             # select only passenger column and explode it
+        passengerData.dropna(subset=['passengers'], inplace=True)       
+
+        JSONpassengers = pd.json_normalize(passengerData.passengers)    # get more details from JSON part   
+        passengerData.reset_index(inplace=True, drop=True)
+
+        passengerData = pd.merge(                                       # merge the previous passenger information (only the num_id i guess?) to the more detailed info from JSON (whats the index that its being merged on?)
+            passengerData[['num_id']], 
+            JSONpassengers[['id', 'display_name', 'gender', 'thumbnail']],
             left_index=True,
             right_index=True
-        )
-        self.passengers_df.rename(columns={'id': 'ID'}, inplace=True)
-        self.types['passengers']['data'] = self.passengers_df
+            )
 
-    def ratings(self):
-        '''
-        Creates ratings dataset, normalizes ID label and explodes JSON.
-        '''
-        self.ratings_df = self.data[['num_id', 'driver_id', 'ratings']]
-        self.ratings_df = self.ratings_df.explode('ratings')
-        self.ratings_df.dropna(subset=['ratings'], inplace=True)
-        self.ratings_df.drop_duplicates(subset=['driver_id'], keep='last', inplace=True)
-        self.json_ratings = pd.json_normalize(self.ratings_df.ratings)
-        self.ratings_df = self.json_ratings[
-            ['sender_uuid', 'sender_display_name', 'sender_profil_picture']
-        ]
-        self.ratings_df.drop_duplicates(subset=['sender_uuid'], keep='last', inplace=True)
-        self.ratings_df.rename(columns={'sender_uuid': 'ID', 'sender_profil_picture': 'thumbnail'}, inplace=True)
-        self.types['ratings']['data'] = self.ratings_df
+        passengerData.rename(columns={'id': 'ID'}, inplace=True)
+        self.types['passengers']['data'] = passengerData
 
-        
-    def parser(self, row):
+    def prepareReviewerData(self):
         '''
-        Requests a thumbnail and stores it in `output`.
-        '''
-        try:
-            response = requests.get(row['thumbnail'])
+        prepares reviewer dataset for downloading in the next step. 
 
-            if response.status_code == 200:
-                with open(str(self.outputPath) + '/' + row['ID'] + '.jpeg', 'wb') as f:
-                    f.write(response.content)
-        except:
-            pass
-
-    def parse_trips(self):
+        - select relevant columns from the DF of the day 
+        - explode to get more info from JSON
+        - rename to uniform name scheme
         '''
-        Filters old thumbnails and parses new ones.
+        reviewerData = self.data[['num_id', 'driver_id', 'ratings']]
+        reviewerData = reviewerData.explode('ratings')
+        reviewerData.dropna(subset=['ratings'], inplace=True)
+        reviewerData.drop_duplicates(subset=['driver_id'], keep='last', inplace=True)
+
+        JSONreviewers = pd.json_normalize(reviewerData.ratings)
+
+        reviewerData = JSONreviewers[['sender_uuid', 'sender_display_name', 'sender_profil_picture']]
+        reviewerData.drop_duplicates(subset=['sender_uuid'], keep='last', inplace=True)
+        reviewerData.rename(columns={
+            'sender_uuid': 'ID', 
+            'sender_profil_picture': 'thumbnail'
+            }, inplace=True)
+
+        self.types['ratings']['data'] = reviewerData
+    
+    def setupDownloads(self):
+        '''
+        preparations for downloading pictures for one or several userTypes. 
+        - for each userTypes, prepare a dataframe of relevant people (with URLs and IDs)
+        - exclude those already downloaded
+        - for the rest, download the pictures
         '''
         for file in self.files:
-            thumbs = [t[:-5] for t in os.listdir(thumb_datadir) if 'jpeg' in t]
+            existingPFPs = [t[:-5] for t in os.listdir('01_data-thumbnails_to_label') if 'jpeg' in t]
             
-            for type in self.utype:
+            for type in self.userTypes:
                 try:
-                    self.types[type]['func']()
-                    self.outdata = self.types[type]['data']
-                    self.outdata = self.outdata.loc[~self.outdata['ID'].isin(thumbs)]
-                    self.outdata.progress_apply(lambda row: self.parser(row), axis=1)
+                    self.types[type]['func']()                                                      # prepare respective data: if userTypes is 'drivers', launch self.prepareDriverData()
+                    dataToProcess = self.types[type]['data']                                        # retrieve data prepared by driver() function
+                    dataToProcess = dataToProcess.loc[~dataToProcess['ID'].isin(existingPFPs)]      # exclude existing pfps
+                    
+                    dataToProcess.progress_apply(lambda row: self.downloadPicture(row), axis=1)     # pass row to it (to get both URL and ID), download picture from URL and name it ID
+
                 except KeyError:
                     print(f'No new thumbnails for day {str(file.__name__)}')
                     continue
 
+    def downloadPicture(self, row):
+        '''
+        download picture from URL and name it ID
+        '''
+        try:
+            response = requests.get(row['thumbnail'])
 
-################################################################################################################################################################
+            # if request successful, save it to
+            if response.status_code == 200:
+                with open(f'{self.outputPath}/{row["ID"]}.jpeg', 'wb') as f:
+                    f.write(response.content)
+        except:
+            pass
 
 
-# basedir = Path(os.environ['BLABLACAR'])
-# datadir = basedir / 'data'
-# scrape_datadir = datadir / 'scraper' / 'output'
-# thumb_datadir = datadir / 'thumbnails'
-# parsed_trips = scrape_datadir / 'parsed_trips'
+
+
+
 
 
 
@@ -206,26 +236,17 @@ class ThumbnailParser:
 
 
 # %% ################################################################################################################################################################
-if __name__ == '__main__':
+for file in glob('../03_scrape_trip_details/01_data-raw_json_dumps/*trips.txt'):
+    
+    instance = PFPdownloader(
+        file=file,        
+        userTypes=['reviewers'],
+        outputPath='01_data-profile_pictures',
+        )
 
-
-    for file in glob('../03_scrape_trip_details/01_data-raw_json_dumps/*trips.txt'):
-
-        oneDayTripsDF = parseJSONtoDF(file)        
-
-        
-
-        instance = ThumbnailParser(
-            inputDF=oneDayTripsDF,  
-            date=re.search(('\d{4}-\d{2}-\d{2}'), file).group(0)       
-            userType=['ratings'],
-            outputPath='01_data-thumbnails_to_label',
-            )
-
-
-        instance.parse_trips()
+    instance.setupDownloads()
 
 
 
-#%%
-glob('../03_scrape_trip_details/01_data-raw_json_dumps/*trips.txt')
+
+
