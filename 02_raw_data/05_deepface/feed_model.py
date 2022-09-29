@@ -1,80 +1,61 @@
 #%%
-import os, shutil, time, zipfile, csv, time, sys, argparse, json, joblib
+import csv
+import os
+import time
+import numpy as np
+
+import joblib
 from joblib import Parallel, delayed
+
 from model import process_image
-
-parser = argparse.ArgumentParser()
-parser.add_argument("zip")
-args = parser.parse_args()
-
 
 
 def generate_csv_headers(max_faces):
     base_headers = ['image', 'metadata', 'faces detected']
     race_headers = []
     gender_headers = []
+    
     for i in range(0, max_faces):
-        race_headers += ['face image ratio %d' % (i+1)]
-        race_headers += ['score face detection %d' % (i+1)]
-        race_headers += ['race %d' % (i+1)]
-        race_headers += ['accuracy race prediction %d' % (i+1)]
-        gender_headers += ['accuracy gender prediction %d' % (i+1)]
-        gender_headers += ['gender %d' % (i+1)]
+        race_headers += [f'face image ratio {i+1}']
+        race_headers += [f'score face detection {i+1}']
+        race_headers += [f'race {i+1}']
+        race_headers += [f'accuracy race prediction {i+1}']
+        gender_headers += [f'accuracy gender prediction {i+1}']
+        gender_headers += [f'gender {i+1}']
+    
     return base_headers + race_headers + gender_headers
 
 
 
 
 n_jobs = joblib.cpu_count()
-timestamp = int(time.time()*1000000)
-images_dir_path = 'tmp/%s/' % timestamp
-images_zip_path = 'data/%s' % args.zip
-
-
-
-
-
-
-
-#%%######################################################################################################
-print('extracting images...')
-
-with zipfile.ZipFile(images_zip_path, 'r') as images_zip:
-    images_zip.extractall(images_dir_path)
-
-
+picturePath = '../04_download_profile_pictures/01_data-profile_pictures'
 
 
 
 
 
 #%%############################################## init CSV ###############################################
-print('processing...')
-csv_file_name = '%d.csv' % int(time.time())
+with open(f'01_data-ethnicity_predictions/{np.datetime64("today")}.csv', 'w', newline='') as csv_file:
 
-
-with open('data/%s' % csv_file_name, 'w', newline='') as csv_file:
-
-    images_path = os.listdir(images_dir_path)
-    # Process images
-
+    images_path = os.listdir(picturePath)
+    
+    # process in parallel
     p = Parallel(n_jobs=n_jobs)
+    
     for image in images_path:
-        results = p(delayed(process_image)(image_path=image, _dir=images_dir_path))              # model gets called
+        results = p(delayed(process_image)(             # model gets called
+            image_path=image, 
+            _dir=picturePath
+            )
+        )              
 
 
-    # Write CSV headers
+    # write CSV 
     max_faces = max([result.get('faces detected', 0) for result in results])
     fieldnames = generate_csv_headers(max_faces)
+
     output_csv = csv.DictWriter(csv_file, fieldnames=fieldnames)
     output_csv.writeheader()
     output_csv.writerows(results)
 
-
-
-
-
-# Cleanup
-shutil.rmtree(images_dir_path)
-
-print('Generated %s' % csv_file_name)
