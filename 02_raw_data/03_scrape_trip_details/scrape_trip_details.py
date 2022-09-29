@@ -1,31 +1,26 @@
+#%%
 import json
 import logging
-import os
 import random
 import time
+from concurrent.futures import (ALL_COMPLETED, ThreadPoolExecutor, as_completed, wait)
 from datetime import date, datetime, timedelta
+from glob import glob
 from pathlib import Path
-from concurrent.futures import (ALL_COMPLETED, ThreadPoolExecutor,
-                                as_completed, wait)
+
 import numpy as np
 import pandas as pd
 import requests
-from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
-requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-
-
+# from requests.packages.urllib3.exceptions import InsecureRequestWarning
+# requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 
-
-
-
-
-
+########################################################################################################################
 
 class ScrapeSession(object):
-    _BASE_URL = "https://www.blablacar.co.uk"
-    USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36 OPR/76.0.4017.107"
+    _BASE_URL = 'https://www.blablacar.co.uk'
+    USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36 OPR/76.0.4017.107'
     
     def __init__(self):
         self._logger = logging.getLogger(self.__class__.__name__)
@@ -39,30 +34,30 @@ class ScrapeSession(object):
         
     @staticmethod
     def _super_proxy():
-        url = "https://wtfismyip.com"
-        proxy_host = "gate.smartproxy.com"
-        proxy_port = "7000"
-        proxy_user = "blablacar"
-        proxy_password = "blablacar_pass"
+        url = 'https://wtfismyip.com'
+        proxy_host = 'gate.smartproxy.com'
+        proxy_port = '7000'
+        proxy_user = 'blablacar'
+        proxy_password = 'blablacar_pass'
 
         proxies = {
-            "https": f"http://user-{proxy_user}:{proxy_password}@{proxy_host}:{proxy_port}/",
-            "http": f"http://user-{proxy_user}:{proxy_password}@{proxy_host}:{proxy_port}/",
+            'https': f'http://user-{proxy_user}:{proxy_password}@{proxy_host}:{proxy_port}/',
+            'http': f'http://user-{proxy_user}:{proxy_password}@{proxy_host}:{proxy_port}/',
         }
         
         return proxies
 
     def _create_session(self):
         headers = {
-            "User-Agent": self.USER_AGENT,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "en_GB",
-            "Accept-Encoding": "gzip, deflate",
-            "DNT": "1",
-            "Connection": "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
-            "Pragma": "no-cache",
-            "Cache-Control": "no-cache",
+            'User-Agent': self.USER_AGENT,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en_GB',
+            'Accept-Encoding': 'gzip, deflate',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Pragma': 'no-cache',
+            'Cache-Control': 'no-cache',
         }
         
         self.session = requests.session()
@@ -101,20 +96,20 @@ class ScrapeSession(object):
         
         result = {
             trip_id: {
-                "ride": {},
-                "rating": [],
-                "status": None,
+                'ride': {},
+                'rating': [],
+                'status': None,
                 }
             }
         
         data = {
-            "source": "CARPOOLING",
-            "id": trip_id,
+            'source': 'CARPOOLING',
+            'id': trip_id,
             }
         
         i = 0
         
-        self._logger.info('CREATE SESSION ({})'.format(self.session.proxies['http']))
+        self._logger.info(f'CREATE SESSION ({self.session.proxies["http"]})')
         
 
 
@@ -139,13 +134,13 @@ class ScrapeSession(object):
                 
                 time.sleep(random.uniform(2,6))
 
-                #################################################################### catch bad responses ##################################################################################
+                ############################################################# just call the normal website to get cookies ##################################################################################
 
-                self._logger.info('REQUESTING BASIC INFO ({})'.format(self.session.proxies['http']))
+                self._logger.info(f'REQUESTING BASIC INFO ({self.session.proxies["http"]})')
 
 
                 response = self.session.get(
-                    "{}/trip".format(self._BASE_URL),
+                    f'{self._BASE_URL}/trip',
                     params=data,
                     timeout=30
                 )
@@ -155,7 +150,7 @@ class ScrapeSession(object):
 
                 # Catch FORBIDDEN HTML responses
                 if response.status_code == 403:
-                    self._logger.info('403 FORBIDDEN ERROR ({}): {}'.format(self.session.proxies['http'], response.reason))
+                    self._logger.info(f'403 FORBIDDEN ERROR ({self.session.proxies["http"]}): {response.reason}')
                     time.sleep(random.uniform(4,6))
                     
                     # If repeated, break code; else return to while loop
@@ -181,48 +176,48 @@ class ScrapeSession(object):
                 time.sleep(random.uniform(4,8))
                 
 
-                ########################################################################################################################################################################
+                ############################################################## request ride info through edge endpoint #######################################################################################################
                 
 
                 self._logger.info('REQUESTING TRIP DETAILS')
                 
                 self.session.headers = {
-                    "User-Agent": self.USER_AGENT,
-                    "Accept": "application/json",
-                    "Accept-Language": "en_GB",
-                    "Accept-Encoding": "gzip, deflate, br",
-                    "Referer": str(self._BASE_URL +'/'),
-                    "Content-Type": "application/json",
+                    'User-Agent': self.USER_AGENT,
+                    'Accept': 'application/json',
+                    'Accept-Language': 'en_GB',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Referer': str(self._BASE_URL +'/'),
+                    'Content-Type': 'application/json',
                     'sec-ch-ua-mobile': '?0', #
                     'sec-fetch-dest': 'empty', #
                     'sec-fetch-mode': 'cors', #
                     'sec-fetch-site': 'same-site', #
-                    "X-Blablacar-Accept-Endpoint-Version": "4", # 5
-                    "x-locale": "en_GB",
-                    "x-visitor-id": self.session.cookies['vstr_id'],
-                    "x-currency": "GBP",
-                    "x-client": "SPA|1.0.0",
-                    "x-forwarded-proto": "https",
-                    "Authorization": f"Bearer {self.session.cookies['app_token']}",
-                    "Origin": "https://www.blablacar.co.uk",
-                    "DNT": "1",
-                    "Connection": "keep-alive",
-                    "Pragma": "no-cache",
-                    "Cache-Control": "no-cache",
-                    "TE": "Trailers"
-                }
+                    'X-Blablacar-Accept-Endpoint-Version': '4', # 5
+                    'x-locale': 'en_GB',
+                    'x-visitor-id': self.session.cookies['vstr_id'],
+                    'x-currency': 'GBP',
+                    'x-client': 'SPA|1.0.0',
+                    'x-forwarded-proto': 'https',
+                    'Authorization': f'Bearer {self.session.cookies["app_token"]}',             # use previously acquired cookies
+                    'Origin': 'https://www.blablacar.co.uk',
+                    'DNT': '1',
+                    'Connection': 'keep-alive',
+                    'Pragma': 'no-cache',
+                    'Cache-Control': 'no-cache',
+                    'TE': 'Trailers'
+                    }
                 
                 data = {
-                    "source": "CARPOOLING",
-                    "id": trip_id,
-                    "requested_seats": "1",
-                }
+                    'source': 'CARPOOLING',
+                    'id': trip_id,
+                    'requested_seats': '1',
+                    }
                 
                 response = self.session.get(
-                    "https://edge.blablacar.co.uk/ride",
+                    'https://edge.blablacar.co.uk/ride',
                     params=data,
                     timeout=30
-                )
+                    )
                 
 
                 # Capture deleted trips between API call and web scrape
@@ -234,7 +229,7 @@ class ScrapeSession(object):
                 
                 # Capture any other exceptions; return control to while loop
                 if not response.ok:
-                    self._logger.info("FAULT AT SECOND REQUEST: {} {}".format(response.status_code, response.reason))
+                    self._logger.info(f'FAULT AT SECOND REQUEST: {response.status_code} {response.reason}')
                     continue
         
                 if response.status_code == 502: # Not an exception
@@ -253,7 +248,7 @@ class ScrapeSession(object):
                 
                 time.sleep(random.uniform(4,6))
                 
-                ########################################################################################################################################################################
+                ######################################################## request reviewer info through EDGE and old API ###########################################################
                 
                 self._logger.info('REQUESTING RATINGS')
                 
@@ -264,22 +259,22 @@ class ScrapeSession(object):
                 while page_num < total_pages:
                     page_num += 1
                     data = {
-                        "page": page_num,
-                        "limit": "100",
+                        'page': page_num,
+                        'limit': '100',
                     }
                     
                     response = self.session.get(
-                        "https://edge.blablacar.co.uk/api/v2/users/{}/rating".format(ride['driver']['id']),
+                        f'https://edge.blablacar.co.uk/api/v2/users/{ride["driver"]["id"]}/rating',
                         params=data,
                         timeout=30
                     )
                     
                 # Capture any exceptions; return control to while loop
                     if not response.ok:
-                        self._logger.info("FAULT AT THIRD REQUEST: {} {}".format(response.status_code, response.reason))
+                        self._logger.info(f'FAULT AT THIRD REQUEST: {response.status_code} {response.reason}')
                         continue
                 
-                    ratings_data = response.json()
+                    ratings_data = response.json()          # includes reviewer data
                     
                     try:
                         result[trip_id]['rating'].append(ratings_data['ratings'])
@@ -291,7 +286,7 @@ class ScrapeSession(object):
                         self._logger.info('RATINGS PAGE %s' % page_num)
                     
                     except KeyError:
-                        self._logger.info("NO RATINGS")
+                        self._logger.info('NO RATINGS')
                         result[trip_id]['rating'] = ['No Ratings']
                         result[trip_id]['web_scrape_time'] = round(time.time())
                 
@@ -307,68 +302,36 @@ class ScrapeSession(object):
 
             # Capture any other exceptions; return control to while loop
             except Exception as e:
-                self._logger.info("REQUEST ERROR: {}".format(e))
+                self._logger.info(f'REQUEST ERROR: {e}')
                 time.sleep(random.uniform(6,8))
                 continue
         
         return result
     
+########################################################################################################################
 
-
-def uniquifier(path):
-    filename, extension = os.path.splitext(path)
-    counter = 1
-
-    while os.path.exists(path):
-        path = filename + "_" + str(counter) + extension
-        counter += 1
-
-    return path
-
-
-
-
-
-
-
-
-#%% Paths & times & logging
-bbcardir = Path(os.environ['BLABLACAR'])
-scriptsdir = bbcardir / 'git_scripts'
-datadir = bbcardir / 'data'
-outdir = datadir / 'scraper' / 'output'
-csvdir = datadir / 'scraper' / '_API_dumps' / 'csv'
-os.chdir(scriptsdir / 'scraper')
-
-
-
-
-today = date.today()
 now = datetime.now()
+
 today = np.datetime64('today')
 tomorrow = today + np.timedelta64(1, 'D')
 
-dt_string = now.strftime("%Y%m%d_%H")
-
-file_to_operate = uniquifier(str(datadir / 'scraper' / '_scrape_dumps' / f'{today}_trips.txt'))         # now in 03_scrape_trip_details/01_data-raw_json_dumps/
+outputFile = f'01_data-raw_JSON_trip_details_{today}_trips.txt'   
 
 
-
-
-### logging ###
-MESSAGE_INFO = "%(asctime)s %(trip)s ----- %(message)s"
-DATEFMT = "%Y/%m/%d %H:%M"
+###### logging ######
+MESSAGE_INFO = '%(asctime)s %(trip)s ----- %(message)s'
+DATEFMT = '%Y/%m/%d %H:%M'
 file_handler = logging.FileHandler(
-    filename=f'./log/{today}_scraper.log', 
-    mode='a'
-)
+    filename=f'logs/{today}_scraper.log', 
+    mode='a',
+    )
 
 file_handler.setFormatter(
     logging.Formatter(
         fmt=MESSAGE_INFO,
-        datefmt=DATEFMT
+        datefmt=DATEFMT,
+        )
     )
-)
 
 stream_handler = logging.StreamHandler()
 
@@ -378,9 +341,15 @@ logging.basicConfig(
     datefmt=DATEFMT,
     handlers=[
         file_handler,
-        stream_handler
-    ]
-)
+        stream_handler,
+        ]
+    )
+
+
+
+
+
+
 
 
 
@@ -388,12 +357,11 @@ logging.basicConfig(
 
 
 #%% #################################################### PROCESSING ####################################################################################################
-list_of_paths = csvdir.glob('*.csv')                                # '_API_dumps' / 'csv' / [date]_trips_0.csv
-day_paths = [x for x in list_of_paths if str(today) in x.name]
+todaysSearchResultsFiles = glob(f'../02_process_trips/01_data-trips_with_duplicates/{today}*.csv')                               # '_API_dumps' / 'csv' / [date]_trips_0.csv
 
 # create dataframe of all observations of today
 lst_results = []
-for item in day_paths:
+for item in todaysSearchResultsFiles:
     _ = pd.read_csv(item)
     lst_results.append(_)
 results = pd.concat(lst_results)        
@@ -411,7 +379,7 @@ store_results = (
 )
 
 
-store_results.to_csv(outdir / f'{dt_string}h_trips.csv')    # 20210621_14h_trips.csv -> we put it in 02_process_trips/02_data-trips_duplicates_removed
+store_results.to_csv(f'../02_process_trips/02_data-trips_without_duplicates/{datetime.now().strftime("%Y%m%d_%H")}h_trips.csv')    
 
 
 
@@ -426,7 +394,7 @@ store_results.to_csv(outdir / f'{dt_string}h_trips.csv')    # 20210621_14h_trips
 
 ################################################## GET TRIP IDS ##################################################
 # Preserve last time a trip is scraped in any of the 5 daily loops, while retaining information on the iteration at which it's scraped for the first time
-API_results = (
+todaysSearchResults = (
     results
     .dropna(subset=['trip_id'])
     .sort_values(by=['num_id', 'day_counter'])
@@ -436,10 +404,10 @@ API_results = (
 
 
 # Keep today-tomorrow trips
-API_results = (
-    API_results
+todaysSearchResults = (
+    todaysSearchResults
     .loc[
-        (API_results['start.date_time'].dt.date == today) 
+        (todaysSearchResults['start.date_time'].dt.date == today) 
         # | (API_results['start.date_time'].dt.date == tomorrow)
     ]
 )
@@ -447,8 +415,8 @@ API_results = (
 
 
 # Create list to run web scraper through -> this is so, so bad - using the same variable for a different type AND overwriting it
-tripIDlist = API_results['trip_id'].to_list()
-
+tripIDlist = todaysSearchResults['trip_id'].to_list()
+tripIDlist[:10]
 
 
 
@@ -497,13 +465,13 @@ while tripIDlist:
     except Exception as e:
         print('########### ERROR THAT TERMINATES WHILE LOOP', e)
         # If crash, save results
-        with open(file_to_operate, 'w') as f:       # 03_scrape_trip_details/01_data-raw_json_dumps/
+        with open(outputFile, 'w') as f:       # 03_scrape_trip_details/01_data-raw_json_dumps/
             f.write(json.dumps(json_dump))
             
 
 
 # Dump results if trip id's are exhausted
-with open(file_to_operate, 'w') as f:            # 03_scrape_trip_details/01_data-raw_json_dumps/
+with open(outputFile, 'w') as f:            # 03_scrape_trip_details/01_data-raw_json_dumps/
     f.write(json.dumps(json_dump))        
 
 
@@ -511,10 +479,7 @@ with open(file_to_operate, 'w') as f:            # 03_scrape_trip_details/01_dat
 
 
 # #%% Parse JSON data
-
 # output_df = parser(file_to_operate)         # now in 03_scrape_trip_details/01_data-raw_json_dumps/
-
 # file_to_save = uniquifier(str(outdir / 'parsed_trips' / f'{today}_parsed_trip_results.pkl'))
-
 # output_df.to_pickle(file_to_save)       # now in 03_scrape_trip_details/02_data-final_output_pickles/
 
