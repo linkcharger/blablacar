@@ -3,12 +3,12 @@
 **/graphics/**
 **/~~ bin ~~/**
 **/.ipynb_checkpoints/**
+**csv
+**vsdx
+**pdf
 01_literature
 03_clean_data
 desktop.ini
 02_raw_data/the_OG_pile
-02_raw_data/05_create_ethnicity_compositions/deepface
 02_raw_data/03_scrape_trip_details/logs
-**csv
-**vsdx
-**pdf
+02_raw_data/05_deepface/model

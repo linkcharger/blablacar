@@ -236,7 +236,7 @@ class PFPdownloader:
 
 
 # %% ################################################################################################################################################################
-for file in glob('../03_scrape_trip_details/01_data-raw_json_dumps/*trips.txt'):
+for file in glob('../03_scrape_trip_details/01_data-raw_JSON_trip_details/*trips.txt'):
     
     instance = PFPdownloader(
         file=file,        
