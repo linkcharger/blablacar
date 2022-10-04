@@ -36,7 +36,7 @@ picturePath = '../04_download_profile_pictures/01_data-profile_pictures'
 
 
 #%%############################################## init CSV ###############################################
-with open(f'01_data-ethnicity_predictions/{np.datetime64("today")}.csv', 'w', newline='') as csv_file:
+with open(f'data/ethnicity_predictions_{np.datetime64("today")}.csv', 'w', newline='') as csv_file:
 
     images_path = os.listdir(picturePath)
     
