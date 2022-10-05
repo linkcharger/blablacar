@@ -1,11 +1,16 @@
-02_raw_data/**/*data*/**
+02_raw_data/**/data/**
+02_raw_data/**/*data-*/**
 **/graphs/**
 **/graphics/**
 **/~~ bin ~~/**
 **/.ipynb_checkpoints/**
+**csv
+**vsdx
+**pdf
 01_literature
 03_clean_data
 desktop.ini
 02_raw_data/the_OG_pile
-02_raw_data/05_create_ethnicity_compositions/deepface
-**.csv
+02_raw_data/03_scrape_trip_details/logs
+02_raw_data/05_deepface/model
+02_raw_data/extracting_from_raw_JSON/

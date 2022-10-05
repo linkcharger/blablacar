@@ -38,7 +38,7 @@ today = date.today()
 #######################################################################################################################################
 
 def numberLatestScrapingRun():
-    todaysFiles = glob(f'01_data-trips_with_duplicates/{date.today()}*.csv')
+    todaysFiles = glob(f'..02_process_trips/01_data-trips_with_duplicates/{date.today()}*.csv')
 
     try:
         return int(max([path[-5] for path in todaysFiles]))
@@ -283,7 +283,7 @@ while not majorCitiesCopy.empty:
                 origin=originCityRow,
                 destinations=frenchPrefectures,  
                 startdate=today,
-                raw_data_location='01_data-raw_JSON_responses',
+                raw_data_location='01_data-raw_JSON_search_results',
             )
             
             trips_list.append([originDepartmentNumber, results])
@@ -309,8 +309,6 @@ while not majorCitiesCopy.empty:
 
 
 
-
-pass
 
 
 
@@ -340,11 +338,11 @@ pass
 
 
 #%% ####################################################### processing ################################################################################
-API_results = pd.DataFrame(trips_list, columns=['DeptNum', 'results'])
-API_results.set_index('DeptNum', inplace=True)
+tripSearchResults = pd.DataFrame(trips_list, columns=['DeptNum', 'results'])
+tripSearchResults.set_index('DeptNum', inplace=True)
 
 majorCities = majorCities.merge(
-    API_results,
+    tripSearchResults,
     left_index=True,
     right_index=True,
     how='left'
