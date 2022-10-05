@@ -30,6 +30,8 @@ def parseJSONtoDF(file):
     output_df : trip dataframe
 
     '''
+    import json
+
     with open(file) as f:
         data = json.loads(f.read())
            
@@ -39,7 +41,7 @@ def parseJSONtoDF(file):
     
     t_list = []
     for i, row in trip_df.iterrows():
-        print(i)
+        # print(i)
         try:
             rating_info = [item for sublist in row['rating'] for item in sublist]
             
@@ -64,7 +66,7 @@ def parseJSONtoDF(file):
         
     output_df = pd.concat(t_list)
     
-    print('made it')
+    # print('made it')
     cols = [
         col
         for col in output_df.columns 
