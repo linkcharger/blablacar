@@ -197,7 +197,7 @@ class PFPdownloader:
         - for the rest, download the pictures
         '''
         for file in self.files:
-            existingPFPs = [t[:-5] for t in os.listdir('01_data-thumbnails_to_label') if 'jpeg' in t]
+            existingPFPs = [t[:-5] for t in os.listdir('01_data-thumbnails_to_label') if 'jpeg' in t] ## this should probably be refactored out of here, to not have to read 500k files every time. or make it a list in a file.
             
             for type in self.userTypes:
                 try:

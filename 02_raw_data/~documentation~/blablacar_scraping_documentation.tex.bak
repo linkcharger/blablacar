@@ -1,0 +1,317 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage[margin=25mm]{geometry}
+\usepackage{pdflscape}
+\usepackage[
+%	hidelinks, 
+	colorlinks=true,
+    linkcolor=black,
+	urlcolor=cyan,
+]{hyperref}
+\usepackage{parskip}		% makes every parindent a parskip
+\usepackage{enumitem}
+%	\setlist{nosep, topsep=-4mm}	
+
+
+\author{Aaron Schade}
+\title{Documentation \\Blablacar scraping workflow}
+
+
+
+
+
+
+
+\begin{document}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\maketitle
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+
+
+\clearpage %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{Overview}
+
+
+
+\subsection*{Preamble}
+The following document describes the flow of work and data that creates the data for the Blablacar project. 
+It's original author is \href{mailto:dampudiavicente@gmail.com}{David Ampudia Vicente} who developed it in late 2021 and 2022; in September of 2022 I took over as maintainer. 
+I organised the files and refactored the code to make my and my successor's job easier. 
+In the following, the sections are named after their corresponding folder names in the \verb|02_raw_data| subfolder and the code can now be found in our \href{https://github.com/linkcharger/blablacar}{Github Repository}.
+Usually only one code file exists per subfolder, this is what will be described in each section below.
+
+It is still far from clean and well-structured, but I didn't feel like re-writing it from scratch. 
+Thus I wash my hands in innocence.
+
+
+
+\subsection*{Summary}
+A schematic overview of the data and work flow can be found below. 
+I explain first its relational, then the temporal aspect.
+Essentially it goes as follows.
+
+First, retrieve the currently publicised trips on blablabcar.com via the search engine. 
+This information tells you when a trip was initially posted. 
+Next, collect the details about the trip, this gives information about the driver, passengers and other details about the trip.
+Using this information, download the profile pictures (PFPs) of all persons involved. 
+Feed these PFPs to the neural net (deepface) to get predictions about the ethnicity of the person in the picture. 
+Finally, compute the composition of ethnicities for each trip or driver. 
+
+In terms of timing, the existence of trips is checked 5 times per day, on each day selected for scraping (this is somewhat discretionary, but usually every 2nd or 3rd day).
+At the end of that same day, download the trip details and the PFPs.\footnote{It is important to emphasise that PFPs should be downloaded at the same time, because the URLs to them go stale once a user changes their pictures, leading to missing observations.}
+This process goes on for as long as more observations are needed. 
+When enough data has been collected, the remaining steps can happen at any point in time. 
+
+
+
+
+\newgeometry{a4paper,left=50mm,right=50mm,top=0mm,bottom=25mm, nohead}
+\begin{landscape}
+	\centering
+	\includegraphics[scale=1]{flowchart.pdf}
+%	\vspace{-10mm}
+\end{landscape}
+\restoregeometry
+
+
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{01\textunderscore scrape\textunderscore trips}
+
+This section is the one that is run multiple (usually 5) times a day. 
+It uses the Blablacar API to retrieve the published trips for a certain origin-destination city pair. 
+We don't use proxies here, but different API keys to prevent denial of service (DoS). 
+
+To get our origin-destination pairs, we first load the prefectures/departments of France.
+We select only continental departments, ignoring islands and colonies. 
+The central cities of each department are the cities we will be working with from here on out.
+There are around 80 in total -- these are our destination cities.
+Out of the central cities we select an even smaller subset of only the biggest cities in France.
+This subset will be our origin cities and there are 10. 
+
+We then go through these origin cities in an outer loop, and create an inner loop in which we iterate over all major (continental) french cities as destinations. 
+We use the current, up-to-date v3 of the Blablacar API and to send a normal request.
+The options for this request include the current origin and destination city coordinates, the date of the desired journey as well as the currency and API key (ie. identity) we currently use.
+This returns a response with a JSON data package that contains one page of search results.
+We save this raw data to disk (in folder \verb|02_raw_data\01_scrape_trips\01_data-raw_JSON_search_results|) and add it to a list kept in memory. 
+If other pages exist, iterate through them and again add them to the file on disk and the list in memory.
+
+The list on the inner loop is 3-dimensional and structure as a list of lists, where each first-order entry contains the information about one destination city, which in turn contains the departmental number of that destination city, the date, and yet another list with the actual trip information. 
+For more clarity, see the example in the code comments. 
+This 3-dimensional list is then integrated into the final lists of results in the outer loop, where all information of trips is collected: the origin city departmental number with the results stored in the previously mentioned list. 
+
+This final list is then converted into a dataframe (DF) and saved to the subfolder \\\verb|02_raw_data\02_process_trips\01_data-trips_with_duplicate|, named so because it still contains duplicate search results. 
+Since the searches are run 5 times a day, the same trip can appear up to 5 times. 
+
+
+The raw data in \verb|01_data-raw_JSON_search_results\| contains the following variables:
+
+\rule{\textwidth}{5mm}
+
+
+
+
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{02\textunderscore process\textunderscore trips}
+
+Ideally this stage of the work flow would simply take the raw, unprocessed data and prepare it for the next steps. 
+However, the original code entangles the retrieving and processing parts of the code so much that separating them would require some time, time that I was not allotted.
+Hence, the somewhat-raw-somewhat-processed data gets saved here by state 01, and only in stage 03 processed finally.
+I created this folder anyway in an attempt to make at least the theoretical data flow more visible.
+
+
+
+
+
+
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{03\textunderscore scrape\textunderscore trip\textunderscore details}
+
+As mentioned, the first step in this stage of the workflow is finishing the processing of the previously downloaded data, namely removing the duplicates.
+To do this, all trip search result files of today are loaded into one DF, where rows without a trip ID are dropped.
+The remaining observations are then sorted in ascending order by the numerical trip ID and the day counter. 
+The day counter indicates which of the five daily scraping sessions this particular row came from (0 to 4).
+Then, duplicates are dropped based on the numerical trip ID, departmental ID and destination name, keeping the first observation (ie. the earliest). 
+
+
+The section that follows is part of the actual data retrieval process, but is believed to be an artefact of the code development process and serves no discernible purpose.
+Since it is still necessary for the later retrieval of trip information, I will quickly elucidate it here.
+The same partially processed data as above is taken, rows without trip ID dropped again, the observations again sorted by the numerical trip ID and day counter, but now the \textbf{last} observation of duplicates based on \textit{only} the numerical trip ID is kept. 
+All information is then thrown away, except the trip ID.\footnote{To my understanding, this simply retrieves the unique trip IDs for the next step, which could have already been done in the previous processing section. The new sorting and selection of rows should not be necessary or make a difference.}
+
+Once all unique trip IDs for the day are retrieved, the can be fed to the loop that actually downloads the detailed trip data from the website.
+This uses the smartproxy.com proxies and the EDGE endpoint.
+In detail, this works as follows.
+
+For each trip ID, set up the requests as a separate thread, submit them all and dump the results to a JSON file once they come in. 
+Thus this step is massively parallel.
+The output files are in \verb|02_raw_data\03_scrape_trip_details\01_data-raw_JSON_trip_details|.
+
+The requests are set up in the following way:
+first, create a session (with cookies, user agent, etc) and request the normal blablacar webpage.
+This creates some personalised cookies for this session.
+These cookies are used in the next step, which requests information about the ride through the EDGE endpoint again.
+This information is stored in the raw JSON data under the key 'ride'.
+
+Then, another request is made to get the reviews data which is stored under 'ratings' in the JSON data files.
+Again the EDGE endpoint is used, but now combined with an older version of the API (v2) since it offers more information than the new one.
+Therefore, data can only be collected for a limited time into the future, until the point at which v2 of the API gets retired.
+
+
+The data contained in \verb|02_raw_data\03_scrape_trip_details\01_data-raw_JSON_trip_details| contains the following variables:
+
+\rule{\textwidth}{5mm}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{04\textunderscore download\textunderscore profile\textunderscore pictures}
+
+To download the profile pictures of drivers, passengers and reviewers, first load --one (day) at a time-- the trip details from the raw JSON files in \\\verb|02_raw_data\03_scrape_trip_details\01_data-raw_JSON_trip_details|.
+A selection can be made about which user group to download PFPs from.
+For each group selected, their user IDs and PFPs URLs are extracted. 
+Previously downloaded PFPs are ignored.
+Then a simple direct request to this URL is made and, if a valid response is received, the picture stored in \\\verb|02_raw_data\04_download_profile_pictures\01_data-profile_pictures|, setting the file name to the user ID.
+
+
+
+
+
+
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{05\textunderscore deepface}
+
+In this subfolder, we have a folder that contains the model weights from pre-training. 
+These weights are accessed in \verb|model.py| and the model structure is set up (layers, etc).
+The file \verb|feed_model.py| then loads the prediction method from \verb|model.py|, grabs the images from the \\\verb|02_raw_data\04_download_profile_pictures\01_data-profile_pictures| directory and hands them to the classification method using multi-threading.
+Since this can be computationally intense, David used the Docker platform for this previously. 
+However, if one has a decent dedicated machine in the office for this, I would suggest running the model there for simplicity's sake.
+
+The output is a CSV file in the \verb|data| subdirectory.
+
+
+
+
+
+
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{06\textunderscore create\textunderscore ethnicity\textunderscore compositions}
+
+This stage now loads and combines the results of stage 03 and 05, the trip details and ethnicities.
+To do this, it loads one day at a time, excluding those that have already been processed.
+Then it creates two sets of columns: 
+one with the ethnicity composition of reviewers that reviewed the current driver in the capacity \textbf{as driver} (\verb|driv_...|), and the current driver in the capacity \textbf{as passenger} (\verb|pass_...|).
+There exist four classes of variables in each group:
+
+\begin{description}[leftmargin=50mm, labelwidth=50mm, labelsep=0mm]
+	\item[$\mathbf{\langle\texttt{capacity}\rangle\textunderscore\texttt{total}}$] 													total number of reviews given to current person in current capacity (over all time, includes reviews written before we started scraping)
+	\item[$\mathbf{\langle\texttt{capacity}\rangle\textunderscore\texttt{total}\textunderscore\texttt{obs}}$]						same as above, but only including the reviews of trips we've observed??\footnote{In the code it seems more like this is the number of people who reviewed the driver in the current capacity \textbf{for which we have an ethnicity}.}
+	\item[$\mathbf{\langle\texttt{capacity}\rangle\textunderscore\langle\texttt{ethnicity}\rangle}$]								absolute number of reviewers of this ethnicity reviewing the current driver in the specific capacity
+	\item[$\mathbf{\langle\texttt{capacity}\rangle\textunderscore\langle\texttt{ethnicity}\rangle\textunderscore\texttt{pc}}$]		share of reviewers of this ethnicity reviewing the current driver in the specific capacity (denominator is the \verb|_total| variable, not \verb|_total_obs|)
+\end{description}
+
+There are two directions of reviews: from passenger to driver, and from driver to passenger.
+Since probably cannot get the latter (from a data perspective), we have to limit ourselves to the former.
+I therefore believe that we should only use the \verb|driv_...| variables and exclude the \verb|pass_...| group (ie. not add them together for a higher sample size) since that would run counter our identification strategy.
+
+
+
+
+
+
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section*{07\textunderscore create\textunderscore individual\textunderscore datasets}
+
+Finally we create the datasets with all the individual data.
+This means we load the raw JSON data again and create clean tables of drivers, passengers and reviewers; we save those to disk (in \verb|02_raw_data\07_create_individual_datasets\data\drivers_only.csv|, for instance).
+Then we add the ethnicity prediction and prediction confidence for each of those, and save that to disk too (in \verb|02_raw_data\07_create_individual_datasets\data\drivers+ethnicites.csv|, for instance).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+\end{document}
