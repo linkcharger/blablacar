@@ -1,0 +1,38 @@
+@echo off
+pushd \\server\share
+
+echo ==========================
+echo ==== FIRST API SCRAPE ====
+echo ==========================
+cmd /c "cd \blablacar\git_scripts & cd blablacar_env\Scripts & call activate.bat & cd git_scripts\scraper & python API_requests.py"
+timeout 600 /nobreak
+
+
+echo ==========================
+echo ==== FIRST API SCRAPE ====
+echo ==========================
+cmd /c "cd %BLABLACAR_PATH%\git_scripts & cd blablacar_env\Scripts & call activate.bat & cd %BLABLACAR_PATH%\git_scripts\scraper & python API_requests.py"
+timeout 600 /nobreak
+
+
+echo ==========================
+echo ==== FIRST API SCRAPE ====
+echo ==========================
+cmd /c "cd %BLABLACAR_PATH%\git_scripts & cd blablacar_env\Scripts & call activate.bat & cd %BLABLACAR_PATH%\git_scripts\scraper & python API_requests.py"
+timeout 600 /nobreak
+
+
+echo ==========================
+echo ==== FIRST API SCRAPE ====
+echo ==========================
+cmd /c "cd %BLABLACAR_PATH%\git_scripts & cd blablacar_env\Scripts & call activate.bat & cd %BLABLACAR_PATH%\git_scripts\scraper & python API_requests.py"
+timeout 600 /nobreak
+
+
+echo =========================================
+echo ==== FIRST API SCRAPE AND WEB SCRAPE ====
+echo =========================================
+cmd /c "cd %BLABLACAR_PATH%\git_scripts & cd blablacar_env\Scripts & call activate.bat & cd %BLABLACAR_PATH%\git_scripts\scraper & python API_requests.py & python Scrape_requests.py"
+
+For /f "tokens=2-4 delims=/ " %%a in ('date /t') do (set mydate=%%c-%%a-%%b)
+echo #### FINISHED SCRAPE FOR DAY %mydate%

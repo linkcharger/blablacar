@@ -13,9 +13,18 @@
     linkcolor=black,
 	urlcolor=cyan,
 ]{hyperref}
-\usepackage{parskip}		% makes every parindent a parskip
+\usepackage{parskip}						% makes every parindent a parskip
 \usepackage{enumitem}
 %	\setlist{nosep, topsep=-4mm}	
+\usepackage[section]{placeins}				% blocks floats from crossing sections
+
+\setcounter{secnumdepth}{0} 				% hides numbers of section on page, but technically make them numbered, so that they all show up in TOC
+
+\usepackage[hang]{footmisc}
+\usepackage{longtable}						% allows for table over several pages
+
+
+
 
 
 \author{Aaron Schade}
@@ -33,6 +42,7 @@
 
 
 \maketitle
+\tableofcontents
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -42,11 +52,11 @@
 
 
 \clearpage %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section*{Overview}
+\section{Overview}
 
 
 
-\subsection*{Preamble}
+\subsection{Preamble}
 The following document describes the flow of work and data that creates the data for the Blablacar project. 
 It's original author is \href{mailto:dampudiavicente@gmail.com}{David Ampudia Vicente} who developed it in late 2021 and 2022; in September of 2022 I took over as maintainer. 
 I organised the files and refactored the code to make my and my successor's job easier. 
@@ -54,12 +64,13 @@ In the following, the sections are named after their corresponding folder names 
 Usually only one code file exists per subfolder, this is what will be described in each section below.
 
 It is still far from clean and well-structured, but I didn't feel like re-writing it from scratch. 
-Thus I wash my hands in innocence.
+Thus I wash my hands in innocence.\footnotemark
+	\footnotetext{Some leniency is, however, appropriate because (1) the problem is complex, (2) the Blablacar website and API keeps changing, so the code stops working and needs to be adapted, and (3) there was not enough time yet to clean it up more.}
 
 
 
-\subsection*{Summary}
-A schematic overview of the data and work flow can be found below. 
+\subsection{Summary}
+A schematic overview of the data and work flow can be found on the next page (it's a vector graphic, so you can zoom in to see the details). 
 I explain first its relational, then the temporal aspect.
 Essentially it goes as follows.
 
@@ -70,10 +81,26 @@ Using this information, download the profile pictures (PFPs) of all persons invo
 Feed these PFPs to the neural net (deepface) to get predictions about the ethnicity of the person in the picture. 
 Finally, compute the composition of ethnicities for each trip or driver. 
 
-In terms of timing, the existence of trips is checked 5 times per day, on each day selected for scraping (this is somewhat discretionary, but usually every 2nd or 3rd day).
-At the end of that same day, download the trip details and the PFPs.\footnote{It is important to emphasise that PFPs should be downloaded at the same time, because the URLs to them go stale once a user changes their pictures, leading to missing observations.}
+In terms of timing, the \textit{existence} of trips is checked 5 times per day, on each day selected for scraping (this is somewhat discretionary, but usually every other day).
+The exact time when the individual trips were caught vary with the amount of search results, but the scraping code was launched at
+\begin{longtable}{p{20mm}p{40mm}}
+	\textbf{Time}	& \textbf{Value of} \verb|day_counter| \\\hline
+	10:00			& 0 \\
+	11:00			& 1 \\
+	12:00			& 2 \\
+	13:00			& 3 \\
+	14:00			& 4	\\
+\caption{Search result timings}
+\label{tab:searchResultTimings}
+\end{longtable}
+\vspace{-10mm}
+and usually finished within 1 to 2h.\footnotemark
+	\footnotetext{Yes, I'm also confused about that overlap works. Actually no, it makes sense: the script launches separate instances of the scrapers, who at first write to their own files (if the previous file already exists?).}
+
+At the end of that same day, download the trip \textit{details} and the PFPs.\footnotemark
+	\footnotetext{It is important to emphasise that PFPs \textit{should} be downloaded at the same time, because the URLs to them go stale once a user changes their pictures, leading to missing observations. This was not done previously, leading to some missing pictures and thus ethnicities.}
 This process goes on for as long as more observations are needed. 
-When enough data has been collected, the remaining steps can happen at any point in time. 
+When enough data has been collected, the remaining steps (predicting ethnicities, computing ethnicity compositions, other datasets) can happen at any point in time. 
 
 
 
@@ -82,7 +109,6 @@ When enough data has been collected, the remaining steps can happen at any point
 \begin{landscape}
 	\centering
 	\includegraphics[scale=1]{flowchart.pdf}
-%	\vspace{-10mm}
 \end{landscape}
 \restoregeometry
 
@@ -94,8 +120,9 @@ When enough data has been collected, the remaining steps can happen at any point
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section*{01\textunderscore scrape\textunderscore trips}
+\section{01\textunderscore scrape\textunderscore trips}
 
+\subsection{Methodology}
 This section is the one that is run multiple (usually 5) times a day. 
 It uses the Blablacar API to retrieve the published trips for a certain origin-destination city pair. 
 We don't use proxies here, but different API keys to prevent denial of service (DoS). 
@@ -122,9 +149,53 @@ This final list is then converted into a dataframe (DF) and saved to the subfold
 Since the searches are run 5 times a day, the same trip can appear up to 5 times. 
 
 
-The raw data in \verb|01_data-raw_JSON_search_results\| contains the following variables:
+\clearpage 
+\subsection{Output data description}
+The raw data in \verb|02_raw_data\01_scrape_trips\01_data-raw_JSON_search_results\| contains the following variables:
 
-\rule{\textwidth}{5mm}
+%\begin{table}[h]
+%\centering
+%\begin{tabular}{p{75mm}p{80mm}}
+\begin{longtable}{p{0.5\textwidth}p{0.5\textwidth}}
+	\textbf{Variable name}						& \textbf{Description} 										\\\hline\hline
+	%
+	\verb|link|                                 & search page link      									\\
+	\verb|search_info.count|                    & number of results    										 \\
+	\verb|search_info.full_trip_count|          & number of already-full trips      							\\\hline
+	%
+	\verb|trips|                           		& list of search results (trips) for these search terms     \\
+	\verb|trips.link|                           & link to individual trip page      								\\
+	\verb|trips.waypoints|            			& information on the start and end point of trip     					\\
+	\verb|trips.waypoints.date_time|            & dates and times (can be used to date trip itself)     				\\
+	\verb|trips.waypoints.place.city|           & city names      															\\
+	\verb|trips.waypoints.place.address|        & addresses     													\\
+	\verb|trips.waypoints.place.latitude|       & latitudes      											\\
+	\verb|trips.waypoints.place.longitude|      & longitudes     										 		\\
+	\verb|trips.waypoints.place.country_code|   & country codes      														\\\hline
+	%
+	\verb|trips.price.amount|                   & price -- number      										\\
+	\verb|trips.price.currency|                 & price -- unit      															\\\hline
+	%
+	\verb|trips.vehicle.make|                   & car make      														\\
+	\verb|trips.vehicle.model|                  & car model      												\\\hline
+	%
+	\verb|trips.distance_in_meters|             & predicted trip distance (not necessarily the actual distance driven)      \\
+	\verb|trips.duration_in_seconds|            & predicted trip duration (ditto)      											\\\hline \\
+%\end{tabular}
+\caption{Variables in raw JSON data of search results}
+\label{tab:tripSearchResults}
+%\end{table}
+\end{longtable}
+
+
+
+
+\vspace{30mm}
+\begin{figure}[h]
+	\centering
+	\rule{100mm}{50mm}
+	\caption{graphic of scraped dates?}
+\end{figure}
 
 
 
@@ -135,15 +206,63 @@ The raw data in \verb|01_data-raw_JSON_search_results\| contains the following v
 
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section*{02\textunderscore process\textunderscore trips}
+
+
+
+
+
+
+
+
+
+\clearpage %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{02\textunderscore process\textunderscore trips}
 
 Ideally this stage of the work flow would simply take the raw, unprocessed data and prepare it for the next steps. 
 However, the original code entangles the retrieving and processing parts of the code so much that separating them would require some time, time that I was not allotted.
-Hence, the somewhat-raw-somewhat-processed data gets saved here by state 01, and only in stage 03 processed finally.
+Hence, the somewhat-raw-somewhat-processed data gets saved here by stage 01, and only in stage 03 processed finally.
 I created this folder anyway in an attempt to make at least the theoretical data flow more visible.
 
 
+\subsection{Data description}
+Both sets of data --with and without (daily) duplicates-- share the same set of variables:
+
+\begin{longtable}{p{0.3\textwidth}p{0.5\textwidth}}
+	\textbf{Variable name}				& \textbf{Description} 					\\\hline\hline
+	\verb|DeptNum|						& \textbf{origin} city department number		\\
+	\verb|Commune|						& \textbf{origin} city/commune		\\
+	\verb|coord|						& \textbf{origin} city coordinates (great variable name)		\\
+	\verb|destination|					& \textbf{destination} city department number		\\\hline
+	%
+	\verb|API_scrape_time|				& 		\\\hline
+	%
+	\verb|link|							& 		\\
+	\verb|distance_in_meters|			& 		\\
+	\verb|duration_in_seconds|			& 		\\
+	\verb|price.amount|					& 		\\
+	\verb|price.currency|				& 		\\
+	\verb|vehicle.make|					& 		\\
+	\verb|vehicle.model|				& 		\\\hline
+	%
+	\verb|start.date_time|				& 		\\
+	\verb|start.place.city|				& 		\\
+	\verb|start.place.address|			& 		\\
+	\verb|start.place.latitude|			& 		\\
+	\verb|start.place.longitude|		& 		\\
+	\verb|start.place.country_code|		& 		\\\hline
+	%
+	\verb|end.date_time|				& 		\\
+	\verb|end.place.city|				& 		\\
+	\verb|end.place.address|			& 		\\
+	\verb|end.place.latitude|			& 		\\
+	\verb|end.place.longitude|			& 		\\
+	\verb|end.place.country_code|		& 		\\
+	%
+	\verb|trip_id|						& full trip ID		\\\hline
+	\verb|num_id|						& numerical part of \verb|trip_id|		\\
+	\verb|day_counter|					& earliest iteration that the trip was found in search (see above which time this roughly corresponds to)	\\\hline \\
+\caption{Variables in}
+\end{longtable}
 
 
 
@@ -154,9 +273,18 @@ I created this folder anyway in an attempt to make at least the theoretical data
 
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section*{03\textunderscore scrape\textunderscore trip\textunderscore details}
 
+
+
+
+
+
+
+
+\clearpage %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{03\textunderscore scrape\textunderscore trip\textunderscore details}
+
+\subsection{Methodology}
 As mentioned, the first step in this stage of the workflow is finishing the processing of the previously downloaded data, namely removing the duplicates.
 To do this, all trip search result files of today are loaded into one DF, where rows without a trip ID are dropped.
 The remaining observations are then sorted in ascending order by the numerical trip ID and the day counter. 
@@ -188,15 +316,83 @@ Again the EDGE endpoint is used, but now combined with an older version of the A
 Therefore, data can only be collected for a limited time into the future, until the point at which v2 of the API gets retired.
 
 
-The data contained in \verb|02_raw_data\03_scrape_trip_details\01_data-raw_JSON_trip_details| contains the following variables:
 
-\rule{\textwidth}{5mm}
-
-
-
+\clearpage 
+\subsection{Output data description}
+The data contained in \\\verb|02_raw_data\03_scrape_trip_details\01_data-raw_JSON_trip_details| contains the following variables:
 
 
 
+\begin{longtable}{p{0.5\textwidth}p{0.5\textwidth}}
+	\textbf{Variable name}							& \textbf{Description} \\\hline\hline
+	%
+	\verb|status|									& was this trip scraped successfully?		\\
+	\verb|web_scrape_time|							& if so, at what time?						\\\hline
+	%
+	\verb|ride.multimodal_id.source|				& 		\\
+	\verb|ride.multimodal_id.id|					& trip ID: \verb|[number]-[origin]-[destination]|		\\
+	\verb|ride.tripoffer_multimodal_id.source|		& 		\\
+	\verb|ride.tripoffer_multimodal_id.id|			& 		\\\hline
+	%
+	\verb|ride.waypoints|							& list of waypoints: same information as before but much longer, all intermediary stops and pickups		\\\hline
+	%
+	\verb|ride.driver.id|							& user ID		\\
+	\verb|ride.driver.display_name|					& first name		\\
+	\verb|ride.driver.thumbnail|					& PFP URL		\\
+	\verb|ride.driver.rating.overall|				& average rating of all trips ever		\\
+	\verb|ride.driver.rating.total_number|			& number of all ratings		\\
+	\verb|ride.driver.gender|						& gender		\\
+	\verb|ride.driver.id_checked|					& 		\\
+	\verb|ride.driver.verification_status.code|		& 		\\\hline
+	%
+	\verb|ride.passengers|							& list of passengers 		\\
+	\verb|ride.passengers.id|						& user ID 		\\
+	\verb|ride.passengers.display_name|				& first name 		\\
+	\verb|ride.passengers.thumbnail|				& PFP URL 		\\
+	\verb|ride.passengers.pickup_id|				&  		\\
+	\verb|ride.passengers.pickup_name|				&  		\\
+	\verb|ride.passengers.dropoff_id|				&  		\\
+	\verb|ride.passengers.dropoff_name|				&  		\\
+	\verb|ride.passengers.seats_booked|				& number of seats booked 		\\
+	\verb|ride.passengers.gender|					&  		\\
+	\verb|ride.passengers.verification_status.code|	&  		\\\hline
+	%
+	\verb|ride.booking_status|						& usually "READY"		\\
+	\verb|ride.payment_mode|						& payment mode: usually \verb|"ONLINE"| but maybe \verb|"CASH"| also possible		\\
+	\verb|ride.approval_mode|						& \verb|"AUTOMATIC"| or \verb|"MANUAL"|		\\
+	\verb|ride.can_contact|							& 		\\
+	\verb|ride.can_report|							& 		\\
+	\verb|ride.display_public_profile|				& 		\\
+	\verb|ride.display_remaining_seats|				& 		\\
+	\verb|ride.flags|								& \verb|"COMFORT", "AUTO_ACCEPT",| \verb|"SMOKING", "PETS", "SANITARY_PASS"|		\\
+	\verb|ride.seats.remaining|						& remaining seats		\\
+	\verb|ride.seats.total|							& total seats available		\\
+	\verb|ride.price_conditions|					& price formatting info		\\
+	\verb|ride.comment|								& description/comment by driver about trip		\\
+	\verb|ride.id_check_booking_status|				& 		\\
+	\verb|ride.cta.action|							& either "BOOK" or "NONE" 		\\
+	\verb|ride.cta.hint|							& available only sometimes: eg. \verb|"PAST_TRIP"|		\\\hline
+	%
+	\verb|ride.vehicle.id|							& 		\\
+	\verb|ride.vehicle.pictures|					& usually do not exist		\\
+	\verb|ride.vehicle.display_name|				& make + model		\\
+	\verb|ride.vehicle.color|						& 		\\
+	\verb|ride.vehicle.thumbnail|					& usually does not exist		\\\hline
+	%
+	\verb|rating.encrypted_id|						& (useless ID)		\\
+	\verb|rating.comment|							& textual review		\\
+	\verb|rating.global_rating|						& numerical review		\\
+	\verb|rating.publication_date|					& date + time		\\
+	\verb|rating.sender_display_name|				& first name		\\
+	\verb|rating.sender_profil_picture|				& PFP URL		\\
+	\verb|rating.sender_id|							& (useless ID)		\\
+	\verb|rating.sender_uuid|						& user ID (the normal type)		\\
+	\verb|rating.role|								& in which capacity was the person that this review is given to acting? If it says \verb|driver|, the review was given from a passenger to the driver; if it says \verb|passenger|, the review was given to the current driver acting as a passenger in a previous trip.\footnote{This is still a conjecture.}		\\
+	\verb|rating.sender_verification_status.code|	& 		\\
+	\verb|rating.responses.responses|				& exists only rarely - unknown meaning		\\\hline \\
+\caption{Variables in raw JSON data of trip details}
+\label{tab:tripDetails}
+\end{longtable}
 
 
 
@@ -206,14 +402,31 @@ The data contained in \verb|02_raw_data\03_scrape_trip_details\01_data-raw_JSON_
 
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section*{04\textunderscore download\textunderscore profile\textunderscore pictures}
 
+
+
+
+
+
+\clearpage %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{04\textunderscore download\textunderscore profile\textunderscore pictures}
+
+\subsection{Methodology}
 To download the profile pictures of drivers, passengers and reviewers, first load --one (day) at a time-- the trip details from the raw JSON files in \\\verb|02_raw_data\03_scrape_trip_details\01_data-raw_JSON_trip_details|.
 A selection can be made about which user group to download PFPs from.
 For each group selected, their user IDs and PFPs URLs are extracted. 
 Previously downloaded PFPs are ignored.
-Then a simple direct request to this URL is made and, if a valid response is received, the picture stored in \\\verb|02_raw_data\04_download_profile_pictures\01_data-profile_pictures|, setting the file name to the user ID.
+Then a simple direct request to this URL is made and, if a valid response is received, the picture stored in \\\verb|02_raw_data\04_download_profile_pictures\01_data-profile_pictures|. 
+
+
+
+
+\subsection{Output data description}
+Each file is named after the user ID it belongs to.
+There are around 500k images which are all the files I received.
+There are some discrepancies with this number and others in Emil's datasets: 
+one figure is 200k drivers (-40k missing ethnicities) plus 200k passengers (-70k missing ethnicities); 
+while in the data descriptives the number is 975k drivers with ethnicity plus 585k passengers with ethnicities (this is probably by trip, so not unique individuals).
 
 
 
@@ -227,15 +440,40 @@ Then a simple direct request to this URL is made and, if a valid response is rec
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section*{05\textunderscore deepface}
+\section{05\textunderscore deepface}
 
-In this subfolder, we have a folder that contains the model weights from pre-training. 
-These weights are accessed in \verb|model.py| and the model structure is set up (layers, etc).
+\subsection{Methodology}
+
+In this subfolder, the facial recognition model is run.
+
+There is a folder (\verb|model|) that contains the model weights from pre-training. 
+In \verb|model.py| these weights are accessed and the model structure is set up (layers, etc).
 The file \verb|feed_model.py| then loads the prediction method from \verb|model.py|, grabs the images from the \\\verb|02_raw_data\04_download_profile_pictures\01_data-profile_pictures| directory and hands them to the classification method using multi-threading.
 Since this can be computationally intense, David used the Docker platform for this previously. 
 However, if one has a decent dedicated machine in the office for this, I would suggest running the model there for simplicity's sake.
 
+
+
+
+\subsection{Output data description}
 The output is a CSV file in the \verb|data| subdirectory.
+It contains predictions for potentially several faces, an ethnicity and gender for each.
+The important variables are:
+\begin{longtable}{p{0.5\textwidth}p{0.5\textwidth}}
+	\textbf{Variable name}					& \textbf{Description} \\\hline\hline
+	\verb|image|							& file name		\\
+	\verb|metadata|							& empty   	\\
+	\verb|faces detected|					& number of faces detected		\\
+	\verb|face image ratio 1|				&		\\
+	\verb|score face detection 1|			&		\\\hline
+	%
+	\verb|race 1|							& main variable of interest		\\
+	\verb|accuracy race prediction 1|		& confidence of prediction		\\\hline
+	%
+	\verb|gender 1|							& gender prediction		\\
+	\verb|accuracy gender prediction 1|		& confidence of prediction	\\\hline\\
+\caption{Deepface output variables}
+\end{longtable}
 
 
 
@@ -248,25 +486,47 @@ The output is a CSV file in the \verb|data| subdirectory.
 
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section*{06\textunderscore create\textunderscore ethnicity\textunderscore compositions}
+\clearpage %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{06\textunderscore create\textunderscore ethnicity\textunderscore compositions}
 
+\subsection{Methodology}
 This stage now loads and combines the results of stage 03 and 05, the trip details and ethnicities.
 To do this, it loads one day at a time, excluding those that have already been processed.
 Then it creates two sets of columns: 
-one with the ethnicity composition of reviewers that reviewed the current driver in the capacity \textbf{as driver} (\verb|driv_...|), and the current driver in the capacity \textbf{as passenger} (\verb|pass_...|).
-There exist four classes of variables in each group:
+one with the ethnicity composition of reviewers that reviewed the current driver in the capacity \textbf{as driver} (\verb|driv_[...]|), and the current driver in the capacity \textbf{as passenger} (\verb|pass_[...]|).
+This is based on the \verb|role| variable in the data from Blablacar.
 
-\begin{description}[leftmargin=50mm, labelwidth=50mm, labelsep=0mm]
-	\item[$\mathbf{\langle\texttt{capacity}\rangle\textunderscore\texttt{total}}$] 													total number of reviews given to current person in current capacity (over all time, includes reviews written before we started scraping)
-	\item[$\mathbf{\langle\texttt{capacity}\rangle\textunderscore\texttt{total}\textunderscore\texttt{obs}}$]						same as above, but only including the reviews of trips we've observed??\footnote{In the code it seems more like this is the number of people who reviewed the driver in the current capacity \textbf{for which we have an ethnicity}.}
-	\item[$\mathbf{\langle\texttt{capacity}\rangle\textunderscore\langle\texttt{ethnicity}\rangle}$]								absolute number of reviewers of this ethnicity reviewing the current driver in the specific capacity
-	\item[$\mathbf{\langle\texttt{capacity}\rangle\textunderscore\langle\texttt{ethnicity}\rangle\textunderscore\texttt{pc}}$]		share of reviewers of this ethnicity reviewing the current driver in the specific capacity (denominator is the \verb|_total| variable, not \verb|_total_obs|)
-\end{description}
+
+\subsection{Output data description}
+There exist four classes of variables in either group/capacity (driver or passenger):
+
+
+\begin{longtable}{p{50mm}p{100mm}}
+	\textbf{Variable name}				& \textbf{Description} \\\hline\hline
+	\verb|<capacity>_total|				& total number of reviews given to current person in current capacity (over all time, includes reviews written before we started scraping)																																\\
+	\verb|<capacity>_total_obs|			& same as above, but only including the reviews of trips we've observed?\footnote{In the code it seems more like this is the number of people who reviewed the driver in the current capacity \textbf{for which we have an ethnicity}. Need to check with Dawud.}		\\
+	\verb|<capacity>_<ethnicity>|	 	& absolute number of reviewers of this ethnicity reviewing the current driver in the specific capacity																																									\\
+	\verb|<capacity>_<ethnicity>_pc| 	& share of reviewers of this ethnicity reviewing the current driver in the specific capacity (denominator is the \verb|_total| variable, not \verb|_total_obs|)   	      	   																							\\ \hline \\
+\caption{Variables in ethnicity compositions}
+\label{tab:varsEthnicityCompositions}
+\end{longtable}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 There are two directions of reviews: from passenger to driver, and from driver to passenger.
 Since probably cannot get the latter (from a data perspective), we have to limit ourselves to the former.
-I therefore believe that we should only use the \verb|driv_...| variables and exclude the \verb|pass_...| group (ie. not add them together for a higher sample size) since that would run counter our identification strategy.
+I therefore believe that we should only use the \verb|driv_[...]| variables and exclude the \verb|pass_[...]| group (ie. not add them together for a higher sample size) since that would run counter our identification strategy.
 
 
 
@@ -279,8 +539,9 @@ I therefore believe that we should only use the \verb|driv_...| variables and ex
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section*{07\textunderscore create\textunderscore individual\textunderscore datasets}
+\section{07\textunderscore create\textunderscore individual\textunderscore datasets}
 
+\subsection{Methodology}
 Finally we create the datasets with all the individual data.
 This means we load the raw JSON data again and create clean tables of drivers, passengers and reviewers; we save those to disk (in \verb|02_raw_data\07_create_individual_datasets\data\drivers_only.csv|, for instance).
 Then we add the ethnicity prediction and prediction confidence for each of those, and save that to disk too (in \verb|02_raw_data\07_create_individual_datasets\data\drivers+ethnicites.csv|, for instance).

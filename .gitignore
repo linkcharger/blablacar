@@ -1,15 +1,20 @@
-02_raw_data/**/data/**
-02_raw_data/**/*data-*/**
 **/graphs/**
 **/graphics/**
 **/~~ bin ~~/**
 **/.ipynb_checkpoints/**
+
+
+01_literature
+03_clean_data
+02_raw_data/**/data/**
+02_raw_data/**/*data-*/**
+
 **csv
 **vsdx
 **pdf
-01_literature
-03_clean_data
+**bak
 desktop.ini
+
 02_raw_data/the_OG_pile
 02_raw_data/03_scrape_trip_details/logs
 02_raw_data/05_deepface/model
